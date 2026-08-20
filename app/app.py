@@ -309,7 +309,7 @@ with col3:
 # CITY COORDINATES
 # ============================================================
 
-coordinates = {
+CITY_COORDINATES = {
 
     "Mumbai":
         (19.0760, 72.8777),
@@ -337,7 +337,7 @@ coordinates = {
 }
 
 
-latitude, longitude = coordinates[city]
+latitude, longitude = CITY_COORDINATES[city]
 
 
 # ============================================================
@@ -375,11 +375,6 @@ if predict_button:
         }]
     )
 
-
-    # ========================================================
-    # PREDICTION
-    # ========================================================
-
     try:
 
         prediction = model.predict(
@@ -392,7 +387,6 @@ if predict_button:
         )
 
         percentage = prediction * 100
-
 
     except Exception as error:
 
@@ -552,8 +546,55 @@ st.markdown(
 )
 
 st.write(
-    "Enter your starting location and destination."
+    "Select your starting city and destination."
 )
+
+
+# ============================================================
+# ROUTE CITY LIST
+# ============================================================
+
+ROUTE_CITIES = {
+
+    "Hyderabad":
+        (17.3850, 78.4867),
+
+    "Vijayawada":
+        (16.5062, 80.6480),
+
+    "Visakhapatnam":
+        (17.6868, 83.2185),
+
+    "Guntur":
+        (16.3067, 80.4365),
+
+    "Tirupati":
+        (13.6288, 79.4192),
+
+    "Nellore":
+        (14.4426, 79.9865),
+
+    "Chennai":
+        (13.0827, 80.2707),
+
+    "Bengaluru":
+        (12.9716, 77.5946),
+
+    "Pune":
+        (18.5204, 73.8567),
+
+    "Mumbai":
+        (19.0760, 72.8777),
+
+    "Delhi":
+        (28.6139, 77.2090),
+
+    "Kolkata":
+        (22.5726, 88.3639),
+
+    "Chandigarh":
+        (30.7333, 76.7794)
+}
 
 
 # ============================================================
@@ -561,11 +602,17 @@ st.write(
 # ============================================================
 
 if "route_result" not in st.session_state:
+
     st.session_state.route_result = None
 
 
+if "last_route_input" not in st.session_state:
+
+    st.session_state.last_route_input = None
+
+
 # ============================================================
-# ROUTE INPUTS
+# ROUTE INPUT
 # ============================================================
 
 route_col1, route_col2 = st.columns(2)
@@ -573,38 +620,44 @@ route_col1, route_col2 = st.columns(2)
 
 with route_col1:
 
-    source = st.text_input(
+    source = st.selectbox(
         "📍 Starting Location",
-        value="Hyderabad, India",
-        key="source_location"
+        list(ROUTE_CITIES.keys()),
+        index=list(
+            ROUTE_CITIES.keys()
+        ).index("Hyderabad")
     )
 
 
 with route_col2:
 
-    destination = st.text_input(
+    destination = st.selectbox(
         "🏁 Destination",
-        value="Vijayawada, India",
-        key="destination_location"
+        list(ROUTE_CITIES.keys()),
+        index=list(
+            ROUTE_CITIES.keys()
+        ).index("Vijayawada")
     )
 
 
 # ============================================================
-# CLEAR OLD RESULT WHEN ROUTE CHANGES
+# CLEAR RESULT WHEN ROUTE CHANGES
 # ============================================================
 
 current_route = (
-    source.strip(),
-    destination.strip()
+    source,
+    destination
 )
 
 
 if (
-    "last_route_input"
-    not in st.session_state
+    st.session_state.last_route_input
+    is None
 ):
 
-    st.session_state.last_route_input = current_route
+    st.session_state.last_route_input = (
+        current_route
+    )
 
 
 elif (
@@ -614,11 +667,13 @@ elif (
 
     st.session_state.route_result = None
 
-    st.session_state.last_route_input = current_route
+    st.session_state.last_route_input = (
+        current_route
+    )
 
 
 # ============================================================
-# ANALYZE BUTTON
+# ANALYZE ROUTE BUTTON
 # ============================================================
 
 analyze_route = st.button(
@@ -629,52 +684,13 @@ analyze_route = st.button(
 
 
 # ============================================================
-# GEOCODING
-# ============================================================
-
-def get_coordinates(place):
-
-    url = (
-        "https://nominatim.openstreetmap.org/search"
-    )
-
-    params = {
-        "q": place,
-        "format": "json",
-        "limit": 1
-    }
-
-    headers = {
-        "User-Agent": "SafeRouteAI/1.0"
-    }
-
-    response = requests.get(
-        url,
-        params=params,
-        headers=headers,
-        timeout=10
-    )
-
-    response.raise_for_status()
-
-    results = response.json()
-
-    if not results:
-        return None
-
-    return (
-        float(results[0]["lat"]),
-        float(results[0]["lon"])
-    )
-
-
-# ============================================================
-# ROUTE GENERATION
+# ROUTE GENERATION USING OSRM
 # ============================================================
 
 def get_route(start, end):
 
     start_lat, start_lon = start
+
     end_lat, end_lon = end
 
     url = (
@@ -689,10 +705,16 @@ def get_route(start, end):
         "geometries": "geojson"
     }
 
+    headers = {
+        "User-Agent":
+        "SafeRouteAI/1.0"
+    }
+
     response = requests.get(
         url,
         params=params,
-        timeout=20
+        headers=headers,
+        timeout=30
     )
 
     response.raise_for_status()
@@ -700,6 +722,7 @@ def get_route(start, end):
     data = response.json()
 
     if data.get("code") != "Ok":
+
         return None
 
     route = data["routes"][0]
@@ -709,13 +732,20 @@ def get_route(start, end):
     ]["coordinates"]
 
     route_coordinates = [
+
         [lat, lon]
+
         for lon, lat in coordinates
     ]
 
     return {
-        "coordinates": route_coordinates,
-        "distance_km": route["distance"] / 1000,
+
+        "coordinates":
+            route_coordinates,
+
+        "distance_km":
+            route["distance"] / 1000,
+
         "duration_minutes":
             route["duration"] / 60
     }
@@ -735,6 +765,7 @@ def haversine_distance(
     earth_radius = 6371.0
 
     lat1 = math.radians(lat1)
+
     lat2 = math.radians(lat2)
 
     delta_lat = math.radians(
@@ -746,15 +777,20 @@ def haversine_distance(
     )
 
     a = (
+
         math.sin(delta_lat / 2) ** 2
+
         +
+
         math.cos(lat1)
         * math.cos(lat2)
         * math.sin(delta_lon / 2) ** 2
     )
 
     c = 2 * math.atan2(
+
         math.sqrt(a),
+
         math.sqrt(1 - a)
     )
 
@@ -778,25 +814,34 @@ def find_route_accidents(
         len(route_coordinates) // 500
     )
 
-    sampled_route = route_coordinates[::step]
+    sampled_route = (
+        route_coordinates[::step]
+    )
 
     for route_lat, route_lon in sampled_route:
 
-        lat_range = radius_km / 111
+        lat_range = (
+            radius_km / 111
+        )
 
         lon_range = (
+
             radius_km
             /
             (
                 111
-                * math.cos(
-                    math.radians(route_lat)
+                *
+                math.cos(
+                    math.radians(
+                        route_lat
+                    )
                 )
                 + 0.000001
             )
         )
 
         candidates = accident_data[
+
             (
                 accident_data["latitude"]
                 .between(
@@ -804,7 +849,9 @@ def find_route_accidents(
                     route_lat + lat_range
                 )
             )
+
             &
+
             (
                 accident_data["longitude"]
                 .between(
@@ -814,18 +861,26 @@ def find_route_accidents(
             )
         ]
 
-        for _, accident in candidates.iterrows():
+
+        for _, accident in (
+            candidates.iterrows()
+        ):
 
             distance = haversine_distance(
+
                 route_lat,
+
                 route_lon,
+
                 accident["latitude"],
+
                 accident["longitude"]
             )
 
             if distance <= radius_km:
 
                 nearby.append(
+
                     {
                         "latitude":
                             accident["latitude"],
@@ -837,19 +892,28 @@ def find_route_accidents(
                             accident["risk_score"],
 
                         "severity":
-                            accident["accident_severity"],
+                            accident[
+                                "accident_severity"
+                            ],
 
                         "distance_km":
                             distance
                     }
                 )
 
+
     if not nearby:
+
         return pd.DataFrame()
 
-    result = pd.DataFrame(nearby)
+
+    result = pd.DataFrame(
+        nearby
+    )
+
 
     return result.drop_duplicates(
+
         subset=[
             "latitude",
             "longitude"
@@ -869,100 +933,134 @@ def calculate_route_risk(
     if nearby_accidents.empty:
 
         return {
+
             "score": 0,
+
             "percentage": 0,
+
             "level": "LOW",
+
             "count": 0
         }
+
 
     accident_count = len(
         nearby_accidents
     )
 
+
     density = (
+
         accident_count
         /
-        max(route_distance, 1)
+        max(
+            route_distance,
+            1
+        )
+
     ) * 10
 
-    average_risk = nearby_accidents[
-        "risk_score"
-    ].mean()
+
+    average_risk = (
+
+        nearby_accidents[
+            "risk_score"
+        ].mean()
+    )
+
 
     density_component = min(
+
         density / 10,
+
         1
     )
 
+
     score = (
+
         0.6 * average_risk
+
         +
+
         0.4 * density_component
     )
 
+
     score = max(
+
         0,
+
         min(
             1,
             score
         )
     )
 
-    percentage = score * 100
+
+    percentage = (
+        score * 100
+    )
+
 
     if score < 0.35:
+
         level = "LOW"
 
     elif score < 0.65:
+
         level = "MEDIUM"
 
     else:
+
         level = "HIGH"
 
+
     return {
-        "score": score,
-        "percentage": percentage,
-        "level": level,
-        "count": accident_count
+
+        "score":
+            score,
+
+        "percentage":
+            percentage,
+
+        "level":
+            level,
+
+        "count":
+            accident_count
     }
 
 
 # ============================================================
-# RUN ROUTE ANALYSIS
+# ANALYZE ROUTE
 # ============================================================
 
 if analyze_route:
 
+    if source == destination:
+
+        st.warning(
+            "⚠️ Starting location and "
+            "destination cannot be the same."
+        )
+
+        st.stop()
+
+
     with st.spinner(
-        "🔎 Analyzing route safety..."
+        "🔎 Calculating safe route..."
     ):
 
         try:
 
-            start = get_coordinates(
+            start = ROUTE_CITIES[
                 source
-            )
+            ]
 
-            if not start:
-
-                st.error(
-                    "❌ Could not find starting location."
-                )
-
-                st.stop()
-
-
-            end = get_coordinates(
+            end = ROUTE_CITIES[
                 destination
-            )
-
-            if not end:
-
-                st.error(
-                    "❌ Could not find destination."
-                )
-
-                st.stop()
+            ]
 
 
             route = get_route(
@@ -970,7 +1068,8 @@ if analyze_route:
                 end
             )
 
-            if not route:
+
+            if route is None:
 
                 st.error(
                     "❌ Could not generate route."
@@ -979,38 +1078,49 @@ if analyze_route:
                 st.stop()
 
 
-            nearby = find_route_accidents(
-                route["coordinates"],
-                accident_df,
-                radius_km=1.0
+            nearby = (
+                find_route_accidents(
+                    route["coordinates"],
+                    accident_df,
+                    radius_km=1.0
+                )
             )
 
 
-            risk = calculate_route_risk(
-                nearby,
-                route["distance_km"]
+            risk = (
+                calculate_route_risk(
+                    nearby,
+                    route["distance_km"]
+                )
             )
 
 
-            # ==================================================
-            # SAVE RESULT IN SESSION STATE
-            # ==================================================
+            # ----------------------------------------------
+            # SAVE RESULT
+            # ----------------------------------------------
 
             st.session_state.route_result = {
 
-                "source": source,
+                "source":
+                    source,
 
-                "destination": destination,
+                "destination":
+                    destination,
 
-                "start": start,
+                "start":
+                    start,
 
-                "end": end,
+                "end":
+                    end,
 
-                "route": route,
+                "route":
+                    route,
 
-                "nearby": nearby,
+                "nearby":
+                    nearby,
 
-                "risk": risk
+                "risk":
+                    risk
             }
 
 
@@ -1022,22 +1132,38 @@ if analyze_route:
 
 
 # ============================================================
-# DISPLAY SAVED ROUTE RESULT
+# DISPLAY ROUTE RESULT
 # ============================================================
 
-if st.session_state.route_result is not None:
+if (
+    st.session_state.route_result
+    is not None
+):
 
-    result = st.session_state.route_result
+    result = (
+        st.session_state.route_result
+    )
 
-    start = result["start"]
 
-    end = result["end"]
+    start = result[
+        "start"
+    ]
 
-    route = result["route"]
+    end = result[
+        "end"
+    ]
 
-    nearby = result["nearby"]
+    route = result[
+        "route"
+    ]
 
-    risk = result["risk"]
+    nearby = result[
+        "nearby"
+    ]
+
+    risk = result[
+        "risk"
+    ]
 
 
     # ========================================================
@@ -1051,7 +1177,9 @@ if st.session_state.route_result is not None:
     )
 
 
-    result1, result2, result3, result4 = st.columns(4)
+    result1, result2, result3, result4 = (
+        st.columns(4)
+    )
 
 
     with result1:
@@ -1093,22 +1221,27 @@ if st.session_state.route_result is not None:
     if risk["level"] == "LOW":
 
         st.success(
+
             "🟢 LOW ROUTE RISK — "
             "Historical accident density along "
             "this route is relatively low."
         )
 
+
     elif risk["level"] == "MEDIUM":
 
         st.warning(
+
             "🟡 MEDIUM ROUTE RISK — "
             "Stay alert around identified "
             "historical accident zones."
         )
 
+
     else:
 
         st.error(
+
             "🔴 HIGH ROUTE RISK — "
             "Multiple historical accident hotspots "
             "were detected along this route."
@@ -1116,7 +1249,7 @@ if st.session_state.route_result is not None:
 
 
     # ========================================================
-    # ROUTE MAP
+    # MAP
     # ========================================================
 
     st.subheader(
@@ -1128,57 +1261,76 @@ if st.session_state.route_result is not None:
         start[0] + end[0]
     ) / 2
 
+
     center_lon = (
         start[1] + end[1]
     ) / 2
 
 
     route_map = folium.Map(
+
         location=[
             center_lat,
             center_lon
         ],
+
         zoom_start=7,
+
         tiles="OpenStreetMap"
     )
 
 
     # --------------------------------------------------------
-    # ROUTE LINE
+    # ROUTE
     # --------------------------------------------------------
 
     folium.PolyLine(
+
         route["coordinates"],
+
         weight=6,
-        tooltip="Selected Route"
+
+        tooltip=(
+            f"{result['source']} → "
+            f"{result['destination']}"
+        )
+
     ).add_to(route_map)
 
 
     # --------------------------------------------------------
-    # START MARKER
+    # START
     # --------------------------------------------------------
 
     folium.Marker(
+
         start,
+
         popup=(
             f"📍 Start: "
             f"{result['source']}"
         ),
+
         tooltip="Starting Location"
+
     ).add_to(route_map)
 
 
     # --------------------------------------------------------
-    # DESTINATION MARKER
+    # DESTINATION
     # --------------------------------------------------------
 
     folium.Marker(
+
         end,
+
         popup=(
             f"🏁 Destination: "
             f"{result['destination']}"
         ),
+
         tooltip="Destination"
+
     ).add_to(route_map)
 
 
@@ -1186,7 +1338,9 @@ if st.session_state.route_result is not None:
     # ACCIDENT MARKERS
     # --------------------------------------------------------
 
-    for _, accident in nearby.iterrows():
+    for _, accident in (
+        nearby.iterrows()
+    ):
 
         folium.CircleMarker(
 
@@ -1198,11 +1352,15 @@ if st.session_state.route_result is not None:
             radius=5,
 
             popup=(
+
                 "⚠️ Historical Accident<br>"
+
                 f"Risk Score: "
                 f"{accident['risk_score']:.2f}<br>"
+
                 f"Severity: "
                 f"{accident['severity']}<br>"
+
                 f"Distance from route: "
                 f"{accident['distance_km']:.2f} km"
             ),
@@ -1219,8 +1377,11 @@ if st.session_state.route_result is not None:
     # --------------------------------------------------------
 
     st_folium(
+
         route_map,
+
         width=None,
+
         height=650
     )
 
@@ -1237,6 +1398,7 @@ if st.session_state.route_result is not None:
 
 
         display_data = nearby[
+
             [
                 "latitude",
                 "longitude",
@@ -1244,6 +1406,7 @@ if st.session_state.route_result is not None:
                 "severity",
                 "distance_km"
             ]
+
         ].copy()
 
 
@@ -1262,14 +1425,19 @@ if st.session_state.route_result is not None:
 
 
         st.dataframe(
+
             display_data,
+
             use_container_width=True,
+
             hide_index=True
         )
+
 
     else:
 
         st.info(
+
             "✅ No historical accident points "
             "were found within 1 km of this route."
         )
@@ -1292,39 +1460,56 @@ st.write(
 
 
 heat_map = folium.Map(
+
     location=[
         20.5937,
         78.9629
     ],
+
     zoom_start=5,
+
     tiles="OpenStreetMap"
 )
 
 
 heat_data = (
+
     accident_df[
+
         [
             "latitude",
             "longitude"
         ]
+
     ]
+
     .dropna()
+
     .values
+
     .tolist()
 )
 
 
 HeatMap(
+
     heat_data,
+
     radius=12,
+
     blur=18,
+
     min_opacity=0.3
+
 ).add_to(heat_map)
 
 
 st_folium(
+
     heat_map,
+
     width=None,
+
     height=600
 )
 
@@ -1340,13 +1525,17 @@ st.header(
 )
 
 
-stat1, stat2, stat3, stat4 = st.columns(4)
+stat1, stat2, stat3, stat4 = (
+    st.columns(4)
+)
 
 
 with stat1:
 
     st.metric(
+
         "Accident Records",
+
         f"{len(accident_df):,}"
     )
 
@@ -1354,23 +1543,33 @@ with stat1:
 with stat2:
 
     st.metric(
+
         "Cities",
-        accident_df["city"].nunique()
+
+        accident_df[
+            "city"
+        ].nunique()
     )
 
 
 with stat3:
 
     st.metric(
+
         "States",
-        accident_df["state"].nunique()
+
+        accident_df[
+            "state"
+        ].nunique()
     )
 
 
 with stat4:
 
     st.metric(
+
         "Average Risk",
+
         f"{accident_df['risk_score'].mean() * 100:.1f}%"
     )
 
